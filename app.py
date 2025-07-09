@@ -8,7 +8,10 @@ import os
 PDF_DIRECTORY = "./podcast_pdfs/"
 
 def main(user_query, initialize=False, directory_path=None, dry_run=False): # directory_path can be kept for flexibility or future use
-    logging.debug(f"[main] Starting process with query: {user_query[:100]}...")
+    if user_query:
+        logging.debug(f"[main] Starting process with query: {user_query[:100]}...")
+    else:
+        logging.debug("[main] Starting process (no user query, likely initialization or internal call)...")
 
     # Use preset directory if initialize is true and no specific directory_path is given
     # Or if we are just running a query and need to ensure VectorStore loads from the correct default place
