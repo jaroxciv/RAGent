@@ -16,13 +16,13 @@ def main(user_query, initialize=False, directory_path=None, dry_run=False): # di
     # Use preset directory if initialize is true and no specific directory_path is given
     # Or if we are just running a query and need to ensure VectorStore loads from the correct default place
     # For Streamlit auto-initialization, directory_path parameter will be None.
-
+    
     if dry_run:
         logging.info("[main] Running in dry run mode")
-
+    
     # VectorStore will persist to "./chroma_db". PDF_DIRECTORY is where it reads from.
-    vector_store = VectorStore(persist_directory="./chroma_db", dry_run=dry_run)
-
+    vector_store = VectorStore(persist_directory="./chroma_db", dry_run=dry_run) 
+    
     if initialize:
         # Always use the preset PDF_DIRECTORY for initialization calls.
         logging.info(f"[main] Attempting initialization/update from preset directory: {PDF_DIRECTORY}")
@@ -39,11 +39,11 @@ def main(user_query, initialize=False, directory_path=None, dry_run=False): # di
                 return f"No PDF files found or processed in '{PDF_DIRECTORY}'. Please add PDFs and refresh."
         else:
             return f"Error processing PDFs from '{PDF_DIRECTORY}'. Check logs for details."
-
+            
     # This block handles the case where we are not initializing, but querying.
     # It checks if the vector store (db) is loaded.
     # If db is not loaded, it could be the first run or a failed load.
-    if not vector_store.db and not initialize:
+    if not vector_store.db and not initialize: 
         logging.error("[main] Vector store not initialized or no PDFs processed.")
         # Try to load processed files list to see if it was initialized before but just not loaded in this session
         processed_files = vector_store.get_processed_files()
@@ -54,8 +54,17 @@ def main(user_query, initialize=False, directory_path=None, dry_run=False): # di
         logging.error("[main] Directory path not provided for initialization")
         return "Please provide a directory path to initialize the system."
 
-    # Handle special commands
-    if user_query.strip().lower() in ["list podcasts", "list all podcasts", "what podcasts are available?", "list available podcasts"]:
+    # Handle special commands for listing podcasts
+    query_lower = user_query.strip().lower() if user_query else ""
+    list_keywords = ["list", "show", "tell me", "what", "which"]
+    podcast_keywords = ["podcasts", "episodes", "available", "content", "files"]
+
+    is_list_query = False
+    if user_query: # Ensure user_query is not None
+        is_list_query = any(lk in query_lower for lk in list_keywords) and \
+                        any(pk in query_lower for pk in podcast_keywords)
+
+    if is_list_query:
         processed_files = vector_store.get_processed_files()
         if not processed_files:
             return "No podcasts have been processed yet. Please initialize with a directory of PDFs."
@@ -69,17 +78,17 @@ def main(user_query, initialize=False, directory_path=None, dry_run=False): # di
 
     logging.debug("[main] Starting query processing for: " + user_query)
     internal_response = vector_store.search(user_query)
-
+    
     logging.debug("[main] Getting RAG response from configured LLM provider.")
     rag_response = call_llm_rag(user_query, internal_response, dry_run) # Changed here
-
+    
     # The RAG functions should ideally return a string directly.
     # If they might return lists (e.g. Claude's TextBlock list), ensure it's handled.
     # _call_claude_rag_internal was updated to handle this. _call_mistral_rag_internal returns string.
-    if not isinstance(rag_response, str):
+    if not isinstance(rag_response, str): 
         logging.warning(f"[main] RAG response was not a string, attempting conversion. Type: {type(rag_response)}")
         rag_response = str(rag_response) # General conversion if not already a string
-
+    
     # Directly return the RAG response. Web search and synthesis are removed.
     logging.info("[main] Returning RAG response")
     return rag_response
