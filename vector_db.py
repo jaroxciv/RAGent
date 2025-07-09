@@ -63,23 +63,28 @@ class VectorStore:
             logging.info(f"[initialize_from_directory] Dry run mode - skipping PDF initialization for {directory_path}")
             return True
 
-        logging.debug(f"[initialize_from_directory] Loading PDFs from directory: {directory_path}")
+        logging.debug(f"[initialize_from_directory] Initializing from directory: {directory_path}")
+
+        if not os.path.exists(directory_path):
+            logging.warning(f"[initialize_from_directory] Directory not found: {directory_path}. Cannot initialize.")
+            # If DB already loaded from persistence, it's still valid.
+            # self.processed_files would be from persisted DB.
+            return bool(self.db)
+
         all_docs = []
         current_processed_files = []
         try:
             for filename in os.listdir(directory_path):
                 if filename.lower().endswith(".pdf"):
                     pdf_path = os.path.join(directory_path, filename)
-                    logging.debug(f"[initialize_from_directory] Loading PDF: {pdf_path}")
+                    # logging.debug(f"[initialize_from_directory] Loading PDF: {pdf_path}") # Can be verbose
                     loader = PyPDFLoader(pdf_path)
                     documents = loader.load()
-                    logging.debug(f"[initialize_from_directory] Loaded {len(documents)} pages from {filename}")
+                    # logging.debug(f"[initialize_from_directory] Loaded {len(documents)} pages from {filename}")
                     current_processed_files.append(filename)
 
-                    # Add metadata to each document
                     for doc in documents:
-                        doc.metadata["source"] = filename # Store filename as source
-                        # You could add more metadata here, e.g., episode number if parsable from filename
+                        doc.metadata["source"] = filename
 
                     text_splitter = CharacterTextSplitter(
                         chunk_size=chunk_size,
@@ -88,19 +93,21 @@ class VectorStore:
                     )
                     split_docs = text_splitter.split_documents(documents)
                     all_docs.extend(split_docs)
-                    logging.debug(f"[initialize_from_directory] Split {filename} into {len(split_docs)} chunks")
 
             if not all_docs:
-                logging.warning(f"[initialize_from_directory] No PDF files found in directory: {directory_path}")
-                # Even if no new files are processed, retain existing DB if any.
-                # Return True if db exists, False otherwise, or based on specific logic.
-                return bool(self.db)
+                logging.warning(f"[initialize_from_directory] No PDF files found in {directory_path}.")
+                # If no files in directory, but DB was loaded from persistence, consider it "successful"
+                # as the existing DB is preserved. self.processed_files remains from __init__.
+                if self.db:
+                    logging.info("[initialize_from_directory] No new PDFs found, existing DB preserved.")
+                    return True
+                # If no DB and no files, it's an empty state.
+                self.processed_files = [] # Ensure processed_files is empty
+                return False # Indicate nothing was initialized and no prior DB.
 
-            # If re-initializing, it's often best to clear old entries or use a new collection.
-            # For simplicity here, we'll overwrite by creating a new Chroma instance.
-            # This means old data is gone if new PDFs are added.
-            # A more sophisticated approach would be to add_documents and handle updates/deletions.
-
+            # If new documents are found, (re)create the DB with them.
+            # This ensures the DB reflects the current content of PDF_DIRECTORY.
+            logging.info(f"[initialize_from_directory] Found {len(all_docs)} chunks from {len(current_processed_files)} PDF(s) in {directory_path}. Rebuilding vector store.")
             self.db = Chroma.from_documents(
                 documents=all_docs,
                 embedding=self.embedding_function,

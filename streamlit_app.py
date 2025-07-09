@@ -28,49 +28,56 @@ def main_chat():
     st.markdown("### Your AI Research Assistant")
     
     initialize_session_state()
-    
-    # Directory Input for PDFs
-    if not st.session_state.initialized:
-        st.subheader("Initialize Podcast Library")
-        pdf_directory = st.text_input("Enter the path to the directory containing podcast PDFs:", key="pdf_dir_input")
+    st.session_state.dry_run_mode = dry_run # Store dry_run_mode in session state from sidebar
 
-        if pdf_directory:
-            if os.path.isdir(pdf_directory):
-                with st.spinner(f"Processing PDFs from {pdf_directory}..."):
-                    response = main(None, initialize=True, directory_path=pdf_directory, dry_run=dry_run)
-                st.success(response) # Display success or error message from main
-                if "Error" not in response:
-                    st.session_state.initialized = True
-                    st.rerun() # Rerun to hide the input and show chat
-                else:
-                    st.error(response)
-            elif pdf_directory != "": # if user entered something but it's not a valid directory
-                st.error("Invalid directory path. Please enter a valid path.")
-        st.markdown("---") # Separator
+    # Automatic Initialization from preset directory
+    if not st.session_state.get("initialized", False): # Use .get for safety
+        st.subheader("Podcast Library Status")
+        # Access PDF_DIRECTORY from app.py. A bit indirect, but avoids re-defining.
+        # For cleaner access, PDF_DIRECTORY could be in a shared config.
+        pdf_dir_path_display = main.__globals__.get('PDF_DIRECTORY', './podcast_pdfs/') # Default if not found
 
-    # Display chat history only if initialized
-    if st.session_state.initialized:
+        with st.spinner(f"Checking and initializing from preset PDF directory ({pdf_dir_path_display})..."):
+            # Call main with initialize=True. main will use its PDF_DIRECTORY.
+            # Pass the current dry_run state from the session.
+            init_response = main(user_query=None, initialize=True, dry_run=st.session_state.dry_run_mode)
+
+        # Check specific phrases that indicate successful processing and readiness
+        if "Successfully processed" in init_response and "Ready for questions." in init_response:
+            st.session_state.initialized = True
+            st.success(init_response)
+            import time
+            time.sleep(1) # Short delay for user to see message
+            st.rerun()
+        elif "PDF directory" in init_response and "was created" in init_response:
+            st.info(init_response)
+        elif "No PDF files found" in init_response:
+            st.warning(init_response)
+        elif "Error" in init_response: # Generic error catch
+            st.error(init_response)
+        else:
+            st.info(init_response) # Default message display
+
+    # Display chat interface only if initialized
+    if st.session_state.get("initialized", False):
         display_chat_history()
     
-        # Chat input
-        if prompt := st.chat_input("What would you like to know?"):
-            # Add user message to chat history
+        if prompt := st.chat_input("What would you like to know about the podcasts?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
-
-            # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
+            with st.chat_message("user"):
+                st.markdown(prompt)
             
-        # Get AI response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response = main(prompt, initialize=False, dry_run=dry_run)
-                
-        # Add AI response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        
-        # Rerun to update the chat display
-        st.rerun()
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    # Pass current dry_run state for query processing
+                    response = main(prompt, initialize=False, dry_run=st.session_state.dry_run_mode)
+                st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            # st.rerun() # Usually not needed for chat, but uncomment if updates are inconsistent
+    else:
+        # This block will be shown if initialization hasn't successfully completed.
+        st.markdown("---")
+        st.info(f"Podcast library not yet ready. Please ensure PDF files are in the `podcast_pdfs` directory. Refresh the page to re-attempt initialization.")
 
 if __name__ == "__main__":
     main_chat()

@@ -2,23 +2,45 @@ import time
 from vector_db import VectorStore
 from utils import call_claude_rag # Removed assess_confidence, synthesize_information, call_tavily_web_search
 import logging
+import os
 
-def main(user_query, initialize=False, directory_path=None, dry_run=False):
+# Define the preset directory for podcast PDFs
+PDF_DIRECTORY = "./podcast_pdfs/"
+
+def main(user_query, initialize=False, directory_path=None, dry_run=False): # directory_path can be kept for flexibility or future use
     logging.debug(f"[main] Starting process with query: {user_query[:100]}...")
+
+    # Use preset directory if initialize is true and no specific directory_path is given
+    # Or if we are just running a query and need to ensure VectorStore loads from the correct default place
+    # For Streamlit auto-initialization, directory_path parameter will be None.
+
     if dry_run:
         logging.info("[main] Running in dry run mode")
     
+    # VectorStore will persist to "./chroma_db". PDF_DIRECTORY is where it reads from.
     vector_store = VectorStore(persist_directory="./chroma_db", dry_run=dry_run)
 
-    if initialize and directory_path:
-        logging.info(f"[main] Initializing with PDFs from directory: {directory_path}")
-        if vector_store.initialize_from_directory(directory_path):
-            return "PDFs processed and ready for questions!"
+    if initialize:
+        # Always use the preset PDF_DIRECTORY for initialization calls.
+        logging.info(f"[main] Attempting initialization/update from preset directory: {PDF_DIRECTORY}")
+        if not os.path.exists(PDF_DIRECTORY):
+            os.makedirs(PDF_DIRECTORY, exist_ok=True) # Create directory if it doesn't exist
+            logging.info(f"[main] Created PDF directory: {PDF_DIRECTORY}")
+            return f"PDF directory '{PDF_DIRECTORY}' was created. Please add your podcast PDFs there and refresh."
+
+        if vector_store.initialize_from_directory(PDF_DIRECTORY):
+            processed_files = vector_store.get_processed_files()
+            if processed_files:
+                return f"Successfully processed {len(processed_files)} PDF(s) from '{PDF_DIRECTORY}'. Ready for questions."
+            else:
+                return f"No PDF files found or processed in '{PDF_DIRECTORY}'. Please add PDFs and refresh."
         else:
-            return "Error processing PDFs. Check logs for details."
-    elif not vector_store.db and not initialize: # Check if DB exists or if we are initializing
-        # This condition means we are not initializing and the DB isn't loaded.
-        # This could be because it's the first run, or loading failed, or no directory was processed yet.
+            return f"Error processing PDFs from '{PDF_DIRECTORY}'. Check logs for details."
+
+    # This block handles the case where we are not initializing, but querying.
+    # It checks if the vector store (db) is loaded.
+    # If db is not loaded, it could be the first run or a failed load.
+    if not vector_store.db and not initialize:
         logging.error("[main] Vector store not initialized or no PDFs processed.")
         # Try to load processed files list to see if it was initialized before but just not loaded in this session
         processed_files = vector_store.get_processed_files()
