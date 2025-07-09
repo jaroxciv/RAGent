@@ -34,14 +34,14 @@ def _call_claude_rag_internal(query, context, dry_run=False):
 
     logging.debug(f"[_call_claude_rag_internal] Processing query for Claude: {query[:100]}...")
     system_prompt = f"""You are a helpful assistant that answers questions based on the provided context. 
-    If the context doesn't contain enough information to answer confidently, indicate that.
+    If the context doesn't contain enough information to answer confidently, indicate that. 
     When referencing information from the podcasts, please cite the source (e.g., "Episode 109", "Sham at [00:00:52.05]") if available in the context.
     Focus on extracting key insights, topics, and speakers mentioned in the podcast excerpts.
     
     Context:
     {context}
     """
-
+    
     try:
         message = client.messages.create(
             model="claude-3-opus-20240229", # Consider making model configurable too in future
@@ -72,48 +72,47 @@ def _call_mistral_rag_internal(query, context, dry_run=False):
         return "Error: Mistral API key not configured."
 
     try:
-        from mistralai.client import MistralClient
-        from mistralai.models.chat_completion import ChatMessage
+        from mistralai import Mistral # Updated import
     except ImportError:
-        logging.error("[_call_mistral_rag_internal] Mistral AI client library not installed. Please run `pip install mistralai`.")
-        return "Error: Mistral AI client library not installed."
+        logging.error("[_call_mistral_rag_internal] Mistral AI client library not installed. Please ensure your 'uv' environment is active and `mistralai` is in requirements.txt and synced.")
+        return "Error: Mistral AI client library not found. Check installation and environment."
 
     if mistral_client is None:
-        mistral_client = MistralClient(api_key=mistral_api_key)
+        try:
+            mistral_client = Mistral(api_key=mistral_api_key) # Updated client initialization
+        except Exception as e:
+            logging.error(f"[_call_mistral_rag_internal] Failed to initialize Mistral client: {e}")
+            return f"Error: Failed to initialize Mistral client: {e}"
+
 
     logging.debug(f"[_call_mistral_rag_internal] Processing query for Mistral: {query[:100]}...")
-
-    # System prompt construction for Mistral (can be adapted)
-    # Mistral models often use a simpler system prompt or integrate it into the user message.
-    # For now, we'll keep a similar structure but note it might need tuning.
+    
+    # System prompt construction for Mistral
+    # Combining system-like instructions with the user query, as shown in the user's example.
     # The main instruction about using context and citing sources is important.
-    system_message_content = f"""You are a helpful assistant. Answer the question based ONLY on the provided context.
+    # Note: Some Mistral models might perform better with a dedicated "system" role message if available and preferred.
+    # For now, aligning with the user's example structure.
+    
+    full_user_content = f"""You are a helpful assistant. Answer the question based ONLY on the provided context.
 If the context doesn't contain enough information, say so.
 When referencing information from the podcasts, please cite the source (e.g., "Episode 109", "Sham at [00:00:52.05]") if available in the context.
 Focus on extracting key insights, topics, and speakers mentioned in the podcast excerpts.
+
 Provided context:
-{context}"""
+{context}
 
-    user_message_content = f"Question: {query}"
-
+Question: {query}
+"""
     messages = [
-        # Some Mistral models prefer system prompt as the first user message or have specific ways to handle it.
-        # A common pattern is User/Assistant turns. We can provide the system instructions as part of the first user message.
-        # Or use the system role if the model supports it well (e.g. mistral-large).
-        # For simplicity and broad compatibility, let's combine system instructions with the user query for now.
-        # A more advanced setup might use model-specific prompt formatting.
-        ChatMessage(role="user", content=f"{system_message_content}\n\n{user_message_content}")
+        {"role": "user", "content": full_user_content}
     ]
-
+    
     try:
-        # Using a common Mistral model, e.g., 'mistral-small-latest' or 'mistral-large-latest'
-        # 'open-mistral-7b' is also an option if you use their open models via appropriate endpoints.
-        # For platform.mistral.ai, models like 'mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest'.
-        # Let's use a generally available one, assuming platform API.
-        chat_response = mistral_client.chat(
-            model="mistral-small-latest", # This can be made configurable
+        # Using the model specified by user, "mistral-large-latest"
+        # This can be made configurable later if needed.
+        chat_response = mistral_client.chat.complete( # Updated API call
+            model="mistral-large-latest", 
             messages=messages,
-            # max_tokens can be set if needed, similar to Claude.
         )
         logging.debug("[_call_mistral_rag_internal] Successfully received response from Mistral.")
         if chat_response.choices and len(chat_response.choices) > 0:
