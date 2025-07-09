@@ -47,9 +47,9 @@ class VectorStore:
                             self.processed_files = list(unique_sources)
                             logging.info(f"[__init__] Loaded {len(self.processed_files)} processed file names from existing DB.")
                 except Exception as e:
-            # If there's an issue loading, it might be due to version conflicts or corruption.
-            # It's safer to log the error and proceed as if no DB exists.
-            logging.warning(f"[__init__] Could not load existing vector store: {e}. Will re-initialize if data is provided.")
+                    # If there's an issue loading, it might be due to version conflicts or corruption.
+                    # It's safer to log the error and proceed as if no DB exists.
+                    logging.warning(f"[__init__] Could not load existing vector store: {e}. Will re-initialize if data is provided.")
                     self.db = None
             else:
                 self.db = None
